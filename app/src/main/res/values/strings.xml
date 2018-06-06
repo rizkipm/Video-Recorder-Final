@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Final Video Recorder</string>
+    <string name="video_button">Video Record Button</string>
 </resources>
