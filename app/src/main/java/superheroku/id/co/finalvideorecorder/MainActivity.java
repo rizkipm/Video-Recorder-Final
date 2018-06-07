@@ -8,6 +8,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
+import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
@@ -41,7 +43,26 @@ import android.view.TextureView;
 import android.view.View;
 import android.widget.Chronometer;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
 import android.widget.Toast;
+
+import com.google.android.exoplayer2.ExoPlayerFactory;
+import com.google.android.exoplayer2.SimpleExoPlayer;
+import com.google.android.exoplayer2.Timeline;
+import com.google.android.exoplayer2.extractor.DefaultExtractorsFactory;
+import com.google.android.exoplayer2.source.ExtractorMediaSource;
+import com.google.android.exoplayer2.source.MediaSource;
+import com.google.android.exoplayer2.trackselection.AdaptiveTrackSelection;
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
+import com.google.android.exoplayer2.trackselection.TrackSelection;
+import com.google.android.exoplayer2.ui.SimpleExoPlayerView;
+import com.google.android.exoplayer2.upstream.BandwidthMeter;
+import com.google.android.exoplayer2.upstream.DataSource;
+import com.google.android.exoplayer2.upstream.DefaultBandwidthMeter;
+import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
+import com.google.android.exoplayer2.upstream.TransferListener;
+import com.google.android.exoplayer2.util.Util;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -54,24 +75,42 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.Semaphore;
 
 public class MainActivity extends AppCompatActivity implements MediaRecorder.OnInfoListener {
 
     private static final String TAG = "Camera2VideoImageActivi";
 
     private static final int REQUEST_CAMERA_PERMISSION_RESULT = 0;
+    private static final int REQUEST_READ_EXTERNAL_STORAGE = 3;
     private static final int REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_RESULT = 1;
     private static final int STATE_PREVIEW = 0;
     private static final int STATE_WAIT_LOCK = 1;
     private int mCaptureState = STATE_PREVIEW;
     private TextureView mTextureView;
     ImageView btnSwicthCamera;
-    public static final String CAMERA_FRONT = "1";
-    public static final String CAMERA_BACK = "0";
 
-    private String cameraId = CAMERA_BACK;
 
-    Context context;
+    private SimpleExoPlayerView simpleExoPlayerView;
+    private SimpleExoPlayer player;
+    private Timeline.Window window;
+    private DataSource.Factory mediaDataSourceFactory;
+    private DefaultTrackSelector trackSelector;
+    private boolean shouldAutoPlay;
+    private BandwidthMeter bandwidthMeter;
+    String pathVideo = "/storage/emulated/0/Pictures/memotus/MEMOTUS_VIDEO_20180606_234157_-1395565877.mp4";
+    String mPathVideo;
+    CameraManager cameraManager;
+
+    private Semaphore mCameraOpenCloseLock = new Semaphore(1);
+
+    Uri nUri;
+    private Integer facing = null;
+    RelativeLayout page_record;
+    LinearLayout page_view;
+    String nVideoFile;
+
+    Context context = this;
 
     String[] permissions = new String[]{
             Manifest.permission.CAMERA,
@@ -109,6 +148,7 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
         @Override
         public void onOpened(CameraDevice camera) {
             mCameraDevice = camera;
+
             mMediaRecorder = new MediaRecorder();
             if (mIsRecording) {
                 try {
@@ -168,7 +208,6 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
                     mBackgroundHandler.post(new ImageSaver(reader.acquireLatestImage()));
                 }
             };
-
 
 
     private class ImageSaver implements Runnable {
@@ -310,16 +349,39 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
         if (result) {
             createVideoFolder();
         }
+        page_record = (RelativeLayout) findViewById(R.id.page_record);
+        page_view = (LinearLayout) findViewById(R.id.page_view_video);
+
+        page_view.setVisibility(View.GONE);
+        shouldAutoPlay = false;
+        bandwidthMeter = new DefaultBandwidthMeter();
+        mediaDataSourceFactory = new DefaultDataSourceFactory(this, Util.getUserAgent(this, "memotusapps"), (TransferListener<? super DataSource>) bandwidthMeter);
+        window = new Timeline.Window();
+
+        View view = findViewById(R.id.custom_playback);
 
 
         mChronometer = (Chronometer) findViewById(R.id.chronometer);
         mTextureView = (TextureView) findViewById(R.id.textureView);
-        btnSwicthCamera = (ImageView)findViewById(R.id.btnImageSwitch);
+        btnSwicthCamera = (ImageView) findViewById(R.id.btnImageSwitch);
         btnSwicthCamera.setOnClickListener(new View.OnClickListener() {
             @SuppressLint("NewApi")
             @Override
             public void onClick(View v) {
-                openFrontFacingCameraGingerbread();
+
+                closeCamera();
+                if (mCameraId.equalsIgnoreCase("0")) {
+                    mCameraId = "1";
+//                    mMediaRecorder.setVideoSize(mTextureView.getWidth(), mTextureView.getHeight());
+//                    mMediaRecorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_HIGH));
+                } else {
+                    mCameraId = "0";
+//                    mMediaRecorder.setProfile(CamcorderProfile.get(CamcorderProfile.QUALITY_HIGH));
+                }
+                connectCamera();
+
+                stopRecordingWhileSwitchingVideo(true);
+
             }
         });
 
@@ -337,12 +399,19 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
                     // Starting the preview prior to stopping recording which should hopefully
                     // resolve issues being seen in Samsung devices.
                     startPreview();
-                    mMediaRecorder.stop();
-                    mMediaRecorder.reset();
+                    stopRecordingVideo(false);
+//                    mMediaRecorder.stop();
+//                    mMediaRecorder.reset();
 
+//                    Intent intent = new Intent(Intent.ACTION_VIEW);
+//                    intent.setDataAndType(Uri.parse(mVideoFileName), "video/mp4");
+//                    startActivity(intent);
                     Intent mediaStoreUpdateIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
                     mediaStoreUpdateIntent.setData(Uri.fromFile(new File(mVideoFileName)));
                     sendBroadcast(mediaStoreUpdateIntent);
+                    page_record.setVisibility(View.GONE);
+                    page_view.setVisibility(View.VISIBLE);
+                    initializePlayer(mVideoFileName);
 
 
                 } else {
@@ -363,26 +432,42 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
         });
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
+    static class CompareSizesByArea implements Comparator<Size> {
 
-        startBackgroundThread();
-
-        if (mTextureView.isAvailable()) {
-            setupCamera(mTextureView.getWidth(), mTextureView.getHeight());
-            connectCamera();
-        } else {
-            mTextureView.setSurfaceTextureListener(mSurfaceTextureListener);
+        @SuppressLint("NewApi")
+        @Override
+        public int compare(Size lhs, Size rhs) {
+            // We cast here to ensure the multiplications won't overflow
+            return Long.signum((long) lhs.getWidth() * lhs.getHeight() -
+                    (long) rhs.getWidth() * rhs.getHeight());
         }
+
     }
 
+    private void stopRecordingVideo(boolean start) {
+        // UI
 
-    @Override
-    protected void onPause() {
-        closeCamera();
-        stopBackgroundThread();
-        super.onPause();
+        mIsRecording = false;
+        mMediaRecorder.stop();
+        mMediaRecorder.reset();
+
+//        closeCamera();
+
+        if (start)
+            setupCamera(mTextureView.getWidth(), mTextureView.getHeight());
+    }
+
+    private void stopRecordingWhileSwitchingVideo(boolean start) {
+        // UI
+
+        mIsRecording = false;
+//        mMediaRecorder.stop();
+//        mMediaRecorder.reset();
+
+//        closeCamera();
+
+        if (start)
+            setupCamera(mTextureView.getWidth(), mTextureView.getHeight());
     }
 
     @Override
@@ -401,36 +486,119 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
 
     @SuppressLint("NewApi")
     private void setupCamera(int width, int height) {
-        CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
 
         try {
             for (String cameraId : cameraManager.getCameraIdList()) {
+                List<String> camera = Arrays.asList(cameraManager.getCameraIdList());
+                for (String id : camera){
+                    Log.d("checkCamera", id);
+                }
                 CameraCharacteristics cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraId);
                 if (cameraCharacteristics.get(CameraCharacteristics.LENS_FACING) ==
                         CameraCharacteristics.LENS_FACING_FRONT) {
-                    continue;
+//                    continue;
+                    StreamConfigurationMap map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                    int deviceOrientation = getWindowManager().getDefaultDisplay().getRotation();
+                    mTotalRotation = sensorToDeviceRotation(cameraCharacteristics, deviceOrientation);
+                    boolean swapRotation = mTotalRotation == 270 || mTotalRotation == 270;
+                    int rotatedWidth = width;
+                    int rotatedHeight = height;
+                    if (swapRotation) {
+                        rotatedWidth = height;
+                        rotatedHeight = width;
+                    }
+                    mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), rotatedWidth, rotatedHeight);
+                    mVideoSize = chooseOptimalSize(map.getOutputSizes(MediaRecorder.class), rotatedWidth, rotatedHeight);
+                    mImageSize = chooseOptimalSize(map.getOutputSizes(ImageFormat.JPEG), rotatedWidth, rotatedHeight);
+                    mImageReader = ImageReader.newInstance(mImageSize.getWidth(), mImageSize.getHeight(), ImageFormat.JPEG, 1);
+                    mImageReader.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler);
+//                mCameraId = "1";
+                    mCameraId = cameraId;
+                }else  if (cameraCharacteristics.get(CameraCharacteristics.LENS_FACING) ==
+                        CameraCharacteristics.LENS_FACING_BACK) {
+                    StreamConfigurationMap map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+                    int deviceOrientation = getWindowManager().getDefaultDisplay().getRotation();
+                    mTotalRotation = sensorToDeviceRotation(cameraCharacteristics, deviceOrientation);
+                    boolean swapRotation = mTotalRotation == 90 || mTotalRotation == 270;
+                    int rotatedWidth = width;
+                    int rotatedHeight = height;
+                    if (swapRotation) {
+                        rotatedWidth = height;
+                        rotatedHeight = width;
+                    }
+
+                    mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), rotatedWidth, rotatedHeight);
+                    mVideoSize = chooseOptimalSize(map.getOutputSizes(MediaRecorder.class), rotatedWidth, rotatedHeight);
+                    mImageSize = chooseOptimalSize(map.getOutputSizes(ImageFormat.JPEG), rotatedWidth, rotatedHeight);
+                    mImageReader = ImageReader.newInstance(mImageSize.getWidth(), mImageSize.getHeight(), ImageFormat.JPEG, 1);
+                    mImageReader.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler);
+//                mCameraId = "1";
+                    mCameraId = cameraId;
                 }
-                StreamConfigurationMap map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-                int deviceOrientation = getWindowManager().getDefaultDisplay().getRotation();
-                mTotalRotation = sensorToDeviceRotation(cameraCharacteristics, deviceOrientation);
-                boolean swapRotation = mTotalRotation == 90 || mTotalRotation == 270;
-                int rotatedWidth = width;
-                int rotatedHeight = height;
-                if (swapRotation) {
-                    rotatedWidth = height;
-                    rotatedHeight = width;
-                }
-                mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), rotatedWidth, rotatedHeight);
-                mVideoSize = chooseOptimalSize(map.getOutputSizes(MediaRecorder.class), rotatedWidth, rotatedHeight);
-                mImageSize = chooseOptimalSize(map.getOutputSizes(ImageFormat.JPEG), rotatedWidth, rotatedHeight);
-                mImageReader = ImageReader.newInstance(mImageSize.getWidth(), mImageSize.getHeight(), ImageFormat.JPEG, 1);
-                mImageReader.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler);
-                mCameraId = cameraId;
+//                StreamConfigurationMap map = cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+//                int deviceOrientation = getWindowManager().getDefaultDisplay().getRotation();
+//                mTotalRotation = sensorToDeviceRotation(cameraCharacteristics, deviceOrientation);
+//                boolean swapRotation = mTotalRotation == 90 || mTotalRotation == 270;
+//                int rotatedWidth = width;
+//                int rotatedHeight = height;
+//                if (swapRotation) {
+//                    rotatedWidth = height;
+//                    rotatedHeight = width;
+//                }
+//                mPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), rotatedWidth, rotatedHeight);
+//                mVideoSize = chooseOptimalSize(map.getOutputSizes(MediaRecorder.class), rotatedWidth, rotatedHeight);
+//                mImageSize = chooseOptimalSize(map.getOutputSizes(ImageFormat.JPEG), rotatedWidth, rotatedHeight);
+//                mImageReader = ImageReader.newInstance(mImageSize.getWidth(), mImageSize.getHeight(), ImageFormat.JPEG, 1);
+//                mImageReader.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler);
+////                mCameraId = "1";
+//                mCameraId = cameraId;
                 return;
             }
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
+    }
+
+    @SuppressLint("NewApi")
+    public int getSensorOrientation() throws CameraAccessException {
+        return cameraManager.getCameraCharacteristics(mCameraId).get(
+                CameraCharacteristics.SENSOR_ORIENTATION);
+    }
+
+    public static int sensorToDeviceRotation(boolean mirror, int deviceOrientation, int sensorOrientation) {
+
+        // Reverse device orientation for front-facing cameras
+        if (mirror) {
+            deviceOrientation = -deviceOrientation;
+        }
+        // Calculate desired JPEG orientation relative to camera orientation to make
+        // the image upright relative to the device orientation
+        return (sensorOrientation + deviceOrientation + 360) % 360;
+    }
+
+
+    private void configureTransform(int viewWidth, int viewHeight) {
+        Activity activity = MainActivity.this;
+        if (null == mTextureView || null == mPreviewSize || null == activity) {
+            return;
+        }
+        int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
+        Matrix matrix = new Matrix();
+        RectF viewRect = new RectF(0, 0, viewWidth, viewHeight);
+        @SuppressLint({"NewApi", "LocalSuppress"}) RectF bufferRect = new RectF(0, 0, mPreviewSize.getHeight(), mPreviewSize.getWidth());
+        float centerX = viewRect.centerX();
+        float centerY = viewRect.centerY();
+        if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
+            bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
+            matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
+            @SuppressLint({"NewApi", "LocalSuppress"}) float scale = Math.max(
+                    (float) viewHeight / mPreviewSize.getHeight(),
+                    (float) viewWidth / mPreviewSize.getWidth());
+            matrix.postScale(scale, scale, centerX, centerY);
+            matrix.postRotate(90 * (rotation - 2), centerX, centerY);
+        }
+        mTextureView.setTransform(matrix);
     }
 
     @SuppressLint({"MissingPermission", "NewApi"})
@@ -630,8 +798,18 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
         String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
         String prepend = "MEMOTUS_VIDEO_" + timestamp + "_";
         File videoFile = File.createTempFile(prepend, ".mp4", mVideoFolder);
-        mVideoFileName = videoFile.getAbsolutePath();
+        mVideoFileName = videoFile.getPath();
         Log.d("pathvideo: " , mVideoFileName);
+        nVideoFile = String.valueOf(videoFile);
+        nUri = Uri.fromFile(new File(mVideoFileName));
+        Log.d("nUriPath : " , nUri.getPath());
+
+        if (videoFile.exists()){
+            Log.d("pathExist", "true");
+
+        }else{
+            Log.d("pathExist", "false");
+        }
         return videoFile;
     }
 
@@ -724,6 +902,17 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
                         "Application will not have audio on record", Toast.LENGTH_SHORT).show();
             }
         }
+
+        if (requestCode == REQUEST_READ_EXTERNAL_STORAGE) {
+            if (grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(getApplicationContext(),
+                        "Application will not run without camera services", Toast.LENGTH_SHORT).show();
+            }
+            if (grantResults[1] != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(getApplicationContext(),
+                        "Application will not have audio on record", Toast.LENGTH_SHORT).show();
+            }
+        }
         if (requestCode == REQUEST_WRITE_EXTERNAL_STORAGE_PERMISSION_RESULT) {
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 if (mIsRecording || mIsTimelapse) {
@@ -747,20 +936,29 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
             Toast.makeText(getApplicationContext(), "Maximum Duration Reached", Toast.LENGTH_SHORT).show();
             try {
                 mChronometer.stop();
-                mChronometer.setVisibility(View.VISIBLE);
+                mChronometer.setVisibility(View.INVISIBLE);
                 mIsRecording = false;
                 mIsTimelapse = false;
-                mRecordImageButton.setImageResource(R.mipmap.btn_video_busy);
+                mRecordImageButton.setImageResource(R.drawable.record);
 
                 // Starting the preview prior to stopping recording which should hopefully
                 // resolve issues being seen in Samsung devices.
                 startPreview();
                 mMediaRecorder.stop();
                 mMediaRecorder.reset();
+                Log.d("video_name2 : ", pathVideo);
 
+//                    Intent intent = new Intent(Intent.ACTION_VIEW);
+//                    intent.setDataAndType(Uri.parse(mVideoFileName), "video/mp4");
+//                    startActivity(intent);
                 Intent mediaStoreUpdateIntent = new Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE);
                 mediaStoreUpdateIntent.setData(Uri.fromFile(new File(mVideoFileName)));
                 sendBroadcast(mediaStoreUpdateIntent);
+                page_record.setVisibility(View.GONE);
+                page_view.setVisibility(View.VISIBLE);
+//                initializePlayer(mVideoFileName);
+
+
             } catch (Exception e) {
 
             }
@@ -769,66 +967,80 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
         }
     }
 
-//    public void switchCamera() {
-//        if (cameraId.equals(CAMERA_FRONT)) {
-//            cameraId = CAMERA_BACK;
-//            closeCamera();
-//            reopenCamera();
-//            btnSwicthCamera.setImageResource(R.drawable.switch_camera);
-//
-//        } else if (cameraId.equals(CAMERA_BACK)) {
-//            cameraId = CAMERA_FRONT;
-//            closeCamera();
-//            reopenCamera();
-//            btnSwicthCamera.setImageResource(R.drawable.switch_camera);
-//
+
+    private void initializePlayer(String pathUriVideo) {
+
+
+        simpleExoPlayerView = (SimpleExoPlayerView) findViewById(R.id.player_view);
+        simpleExoPlayerView.requestFocus();
+        TrackSelection.Factory videoTrackSelectionFactory =
+                new AdaptiveTrackSelection.Factory(bandwidthMeter);
+        trackSelector = new DefaultTrackSelector(videoTrackSelectionFactory);
+        player = ExoPlayerFactory.newSimpleInstance(this, trackSelector);
+        simpleExoPlayerView.setPlayer(player);
+        player.setPlayWhenReady(shouldAutoPlay);
+        DefaultExtractorsFactory extractorsFactory = new DefaultExtractorsFactory();
+        MediaSource mediaSource = new ExtractorMediaSource(Uri.parse(pathUriVideo),
+                mediaDataSourceFactory, extractorsFactory, null, null);
+        player.prepare(mediaSource);
+        Log.d("video name : ", pathVideo);
+//        Intent intent = new Intent(Intent.ACTION_VIEW);
+//        intent.setDataAndType(Uri.parse(pathUriVideo), "video/mp4");
+//        startActivity(intent);
+//        Uri vidFile = Uri.parse(
+//                Environment.getExternalStorageDirectory().getAbsolutePath()+ "memotus/" + pathUriVideo);
+//        String dataVideo = String.valueOf(vidFile);
+//        buildMediaSource(vidFile);
+
+    }
+
+
+    private void releasePlayer() {
+        if (player != null) {
+            shouldAutoPlay = player.getPlayWhenReady();
+            player.release();
+            player = null;
+            trackSelector = null;
+        }
+    }
+
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (Util.SDK_INT > 23) {
+            releasePlayer();
+        }
+    }
+
+
+    @Override
+    protected void onPause() {
+        closeCamera();
+        stopBackgroundThread();
+        super.onPause();
+        if (Util.SDK_INT <= 23) {
+            releasePlayer();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+//        closeCamera();
+//        stopBackgroundThread();
+//        super.onPause();
+//        if (Util.SDK_INT <= 23) {
+//            releasePlayer();
 //        }
-//    }
 
-
-
-    public static void setCameraDisplayOrientation(Activity activity,
-                                                   int cameraId, android.hardware.Camera camera) {
-        android.hardware.Camera.CameraInfo info =
-                new android.hardware.Camera.CameraInfo();
-        android.hardware.Camera.getCameraInfo(cameraId, info);
-        int rotation = activity.getWindowManager().getDefaultDisplay()
-                .getRotation();
-        int degrees = 0;
-        switch (rotation) {
-            case Surface.ROTATION_0: degrees = 0; break;
-            case Surface.ROTATION_90: degrees = 90; break;
-            case Surface.ROTATION_180: degrees = 180; break;
-            case Surface.ROTATION_270: degrees = 270; break;
+        startBackgroundThread();
+//
+        if (mTextureView.isAvailable()) {
+            setupCamera(mTextureView.getWidth(), mTextureView.getHeight());
+            connectCamera();
+        } else {
+            mTextureView.setSurfaceTextureListener(mSurfaceTextureListener);
         }
-
-        int result;
-        if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
-            result = (info.orientation + degrees) % 360;
-            result = (360 - result) % 360;  // compensate the mirror
-        } else {  // back-facing
-            result = (info.orientation - degrees + 360) % 360;
-        }
-        camera.setDisplayOrientation(result);
     }
-
-    private Camera openFrontFacingCameraGingerbread() {
-        int cameraCount = 0;
-        Camera cam = null;
-        Camera.CameraInfo cameraInfo = new Camera.CameraInfo();
-        cameraCount = Camera.getNumberOfCameras();
-        for (int camIdx = 0; camIdx<cameraCount; camIdx++) {
-            Camera.getCameraInfo(camIdx, cameraInfo);
-            if (cameraInfo.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
-                try {
-                    cam = Camera.open(camIdx);
-                } catch (RuntimeException e) {
-                    Log.e("Your_TAG", "Camera failed to open: " + e.getLocalizedMessage());
-                }
-            }
-        }
-        return cam;
-    }
-
-
 }

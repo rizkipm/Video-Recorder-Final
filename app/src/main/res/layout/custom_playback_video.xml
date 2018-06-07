@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:id="@+id/custom_playback"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/btnClose"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:layout_marginLeft="15dp"
+                android:layout_marginTop="25dp"
+                android:src="@drawable/ic_close_white_24dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="426dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@id/exo_prev"
+
+                android:layout_width="90dp"
+                android:textAllCaps="false"
+                android:layout_height="45dp"
+                android:layout_gravity="center"
+                android:layout_marginRight="15dp"
+                android:background="@drawable/shape_rectangle_white"
+                android:text="Repeat" />
+
+            <ImageView
+                android:id="@id/exo_pause"
+                android:layout_width="75dp"
+                android:layout_height="75dp"
+                android:layout_gravity="center"
+                android:layout_marginLeft="15dp"
+                android:layout_marginRight="15dp"
+                android:background="@drawable/shape_oval_white"
+                android:padding="10dp"
+                android:src="@drawable/ic_pause_red_24dp" />
+
+
+            <ImageView
+                android:id="@id/exo_play"
+
+                android:layout_width="75dp"
+                android:layout_height="75dp"
+                android:layout_gravity="center"
+                android:layout_marginLeft="15dp"
+                android:layout_marginRight="15dp"
+                android:background="@drawable/shape_oval_white"
+                android:padding="10dp"
+                android:src="@drawable/ic_play_arrow_play_24dp" />
+
+            <Button
+                android:id="@+id/exo_ffwd"
+                style="@style/StyleFontSize14White"
+                android:layout_width="90dp"
+                android:layout_height="45dp"
+                android:layout_gravity="center"
+                android:layout_marginLeft="15dp"
+                android:background="@drawable/shape_rectangle_red"
+                android:onClick="next"
+                android:textAllCaps="false"
+                android:text="Accept"
+                android:textColor="#ffffff" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</android.support.constraint.ConstraintLayout>

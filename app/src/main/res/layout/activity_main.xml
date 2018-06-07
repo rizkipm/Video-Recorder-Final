@@ -1,50 +1,90 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#ffffff"
-    tools:context=".MainActivity">
+    tools:context=".MainActivity"
+    android:orientation="vertical">
 
-    <TextureView
-        android:id="@+id/textureView"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentStart="true"
-        android:layout_alignParentTop="true" />
-
-    <ImageView
-        android:id="@+id/videoOnlineImageButton"
+    <RelativeLayout
+        android:id="@+id/page_record"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_centerHorizontal="true"
-        android:layout_marginBottom="34dp"
-        android:contentDescription="@string/video_button"
-        android:foregroundGravity="center"
-        android:src="@drawable/record" />
+        android:layout_height="match_parent">
 
-    <Chronometer
-        android:id="@+id/chronometer"
+        <TextureView
+            android:id="@+id/textureView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_alignParentTop="true"
+            tools:ignore="RtlCompat" />
+
+        <ImageView
+            android:id="@+id/videoOnlineImageButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_centerHorizontal="true"
+            android:layout_marginBottom="34dp"
+            android:contentDescription="@string/video_button"
+            android:foregroundGravity="center"
+            android:src="@drawable/record" />
+
+        <Chronometer
+            android:id="@+id/chronometer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_above="@+id/videoOnlineImageButton"
+            android:layout_alignLeft="@+id/videoOnlineImageButton"
+            android:layout_alignStart="@+id/videoOnlineImageButton"
+            android:gravity="center"
+            android:textColor="#ff0000"
+            android:textSize="25dp"
+            android:visibility="invisible" />
+
+        <ImageView
+            android:id="@+id/btnImageSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentEnd="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginEnd="21dp"
+            android:layout_marginTop="14dp"
+            app:srcCompat="@drawable/switch_camera"
+            tools:ignore="RtlCompat" />
+
+    </RelativeLayout>
+
+    <LinearLayout
+        android:id="@+id/page_view_video"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_above="@+id/videoOnlineImageButton"
-        android:layout_alignLeft="@+id/videoOnlineImageButton"
-        android:layout_alignStart="@+id/videoOnlineImageButton"
-        android:gravity="center"
-        android:textColor="#ff0000"
-        android:textSize="25dp"
-        android:visibility="invisible" />
+        android:layout_height="match_parent">
 
-    <ImageView
-        android:id="@+id/btnImageSwitch"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_alignParentEnd="true"
-        android:layout_alignParentTop="true"
-        android:layout_marginEnd="21dp"
-        android:layout_marginTop="14dp"
-        app:srcCompat="@drawable/switch_camera" />
+        <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            xmlns:tools="http://schemas.android.com/tools"
+            android:id="@+id/root"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:focusable="true"
+            android:keepScreenOn="true">
 
-</RelativeLayout>
+            <com.google.android.exoplayer2.ui.SimpleExoPlayerView xmlns:app="http://schemas.android.com/apk/res-auto"
+                android:id="@+id/player_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:controller_layout_id="@layout/custom_playback_video"
+                app:default_artwork="@drawable/ic_loading"
+                app:fastforward_increment="1000"
+                app:resize_mode="fill"
+                app:rewind_increment="1000"
+                app:show_timeout="1000"
+                app:use_artwork="false" />
+
+        </FrameLayout>
+    </LinearLayout>
+
+
+
+</LinearLayout>
