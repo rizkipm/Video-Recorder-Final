@@ -3,11 +3,13 @@ package superheroku.id.co.finalvideorecorder;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
+import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -63,6 +65,11 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
     private static final int STATE_WAIT_LOCK = 1;
     private int mCaptureState = STATE_PREVIEW;
     private TextureView mTextureView;
+    ImageView btnSwicthCamera;
+    public static final String CAMERA_FRONT = "1";
+    public static final String CAMERA_BACK = "0";
+
+    private String cameraId = CAMERA_BACK;
 
     Context context;
 
@@ -272,6 +279,8 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
     private String mVideoFileName;
     private File mImageFolder;
     private ImageReader mImageReader;
+    Camera nCamera = null;
+    int currentCameraId;
 
     private static SparseIntArray ORIENTATIONS = new SparseIntArray();
 
@@ -305,6 +314,14 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
 
         mChronometer = (Chronometer) findViewById(R.id.chronometer);
         mTextureView = (TextureView) findViewById(R.id.textureView);
+        btnSwicthCamera = (ImageView)findViewById(R.id.btnImageSwitch);
+        btnSwicthCamera.setOnClickListener(new View.OnClickListener() {
+            @SuppressLint("NewApi")
+            @Override
+            public void onClick(View v) {
+                openFrontFacingCameraGingerbread();
+            }
+        });
 
         mRecordImageButton = (ImageView) findViewById(R.id.videoOnlineImageButton);
         mRecordImageButton.setOnClickListener(new View.OnClickListener() {
@@ -385,6 +402,7 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
     @SuppressLint("NewApi")
     private void setupCamera(int width, int height) {
         CameraManager cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+
         try {
             for (String cameraId : cameraManager.getCameraIdList()) {
                 CameraCharacteristics cameraCharacteristics = cameraManager.getCameraCharacteristics(cameraId);
@@ -483,7 +501,8 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
     }
 
     @SuppressLint("NewApi")
-    private void startPreview() {
+    private void
+    startPreview() {
         SurfaceTexture surfaceTexture = mTextureView.getSurfaceTexture();
         surfaceTexture.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         Surface previewSurface = new Surface(surfaceTexture);
@@ -612,6 +631,7 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
         String prepend = "MEMOTUS_VIDEO_" + timestamp + "_";
         File videoFile = File.createTempFile(prepend, ".mp4", mVideoFolder);
         mVideoFileName = videoFile.getAbsolutePath();
+        Log.d("pathvideo: " , mVideoFileName);
         return videoFile;
     }
 
@@ -748,5 +768,67 @@ public class MainActivity extends AppCompatActivity implements MediaRecorder.OnI
 
         }
     }
+
+//    public void switchCamera() {
+//        if (cameraId.equals(CAMERA_FRONT)) {
+//            cameraId = CAMERA_BACK;
+//            closeCamera();
+//            reopenCamera();
+//            btnSwicthCamera.setImageResource(R.drawable.switch_camera);
+//
+//        } else if (cameraId.equals(CAMERA_BACK)) {
+//            cameraId = CAMERA_FRONT;
+//            closeCamera();
+//            reopenCamera();
+//            btnSwicthCamera.setImageResource(R.drawable.switch_camera);
+//
+//        }
+//    }
+
+
+
+    public static void setCameraDisplayOrientation(Activity activity,
+                                                   int cameraId, android.hardware.Camera camera) {
+        android.hardware.Camera.CameraInfo info =
+                new android.hardware.Camera.CameraInfo();
+        android.hardware.Camera.getCameraInfo(cameraId, info);
+        int rotation = activity.getWindowManager().getDefaultDisplay()
+                .getRotation();
+        int degrees = 0;
+        switch (rotation) {
+            case Surface.ROTATION_0: degrees = 0; break;
+            case Surface.ROTATION_90: degrees = 90; break;
+            case Surface.ROTATION_180: degrees = 180; break;
+            case Surface.ROTATION_270: degrees = 270; break;
+        }
+
+        int result;
+        if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+            result = (info.orientation + degrees) % 360;
+            result = (360 - result) % 360;  // compensate the mirror
+        } else {  // back-facing
+            result = (info.orientation - degrees + 360) % 360;
+        }
+        camera.setDisplayOrientation(result);
+    }
+
+    private Camera openFrontFacingCameraGingerbread() {
+        int cameraCount = 0;
+        Camera cam = null;
+        Camera.CameraInfo cameraInfo = new Camera.CameraInfo();
+        cameraCount = Camera.getNumberOfCameras();
+        for (int camIdx = 0; camIdx<cameraCount; camIdx++) {
+            Camera.getCameraInfo(camIdx, cameraInfo);
+            if (cameraInfo.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+                try {
+                    cam = Camera.open(camIdx);
+                } catch (RuntimeException e) {
+                    Log.e("Your_TAG", "Camera failed to open: " + e.getLocalizedMessage());
+                }
+            }
+        }
+        return cam;
+    }
+
 
 }
